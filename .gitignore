@@ -29,6 +29,7 @@ data/
 include/
 pip-selfcheck.json
 *.swp
+TEST/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
