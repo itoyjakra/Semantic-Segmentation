@@ -58,9 +58,18 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
     # TODO: add kernel regularizer
-    vgg7_conv1 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, padding='same')
-    vgg4_conv1 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, padding='same')
-    vgg3_conv1 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, padding='same')
+    # kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3)
+    # kernel_initializer=tf.truncated_normal_initializer(stddev=0.01)
+    #
+    vgg7_conv1 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, padding='same',
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+            kernel_initializer=tf.truncated_normal_initializer(stddev=0.01))
+    vgg4_conv1 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, padding='same',
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+            kernel_initializer=tf.truncated_normal_initializer(stddev=0.01))
+    vgg3_conv1 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, padding='same',
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+            kernel_initializer=tf.truncated_normal_initializer(stddev=0.01))
 
     vgg7_conv1_up2 = tf.layers.conv2d_transpose(vgg7_conv1, num_classes, 4, strides=(2, 2), padding='same')
     vgg_74 = tf.add(vgg4_conv1, vgg7_conv1_up2)
@@ -107,17 +116,20 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param learning_rate: TF Placeholder for learning rate
     """
 
-    print ('keep_prob = ', keep_prob)
+    print('batch size = ', batch_size)
     sess.run(tf.global_variables_initializer())
     for i in range(epochs):
         for images, labels in get_batches_fn(batch_size):
-            _, loss = sess.run([train_op, cross_entropy_loss],
+            #print(sess.run(tf.shape(images)))
+            #print(sess.run(tf.shape(labels)))
+            _, loss= sess.run([train_op, cross_entropy_loss],
                                feed_dict={input_image: images,
                                           correct_label: labels,
-                                          learning_rate: 0.0001,
-                                          keep_prob: 1.0
+                                          learning_rate: 0.001,
+                                          keep_prob: 0.5
                                          }
                               )
+            print('loss = ', loss)
         print('epoch: {}  loss: {}'.format(i, loss))
 
 
@@ -130,8 +142,8 @@ def run():
     image_shape = (160, 576)
     data_dir = './data'
     runs_dir = './runs'
-    max_epochs = 5
-    batch_size = 8
+    max_epochs = 25
+    batch_size = 16
     #learning_rate = 1.0e-5
     tests.test_for_kitti_dataset(data_dir)
 
