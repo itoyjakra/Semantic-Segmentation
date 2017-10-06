@@ -10,7 +10,8 @@ import tensorflow as tf
 from glob import glob
 from urllib.request import urlretrieve
 from tqdm import tqdm
-
+# library for image augmentation: https://github.com/aleju/imgaug
+from imgaug import augmenters as iaa
 
 class DLProgress(tqdm):
     last_block = 0
@@ -56,6 +57,58 @@ def maybe_download_pretrained_vgg(data_dir):
 
         # Remove zip file to save space
         os.remove(os.path.join(vgg_path, vgg_filename))
+
+def gen_batch_function_aug(data_folder, image_shape):
+    """
+    Generate function to create batches of training data
+    :param data_folder: Path to folder that contains all the datasets
+    :param image_shape: Tuple - Shape of image
+    :return:
+    """
+        
+    background_color = np.array([255, 0, 0])
+    def label_image(im):
+        """
+        Create a mask for the image labels
+        """
+        gt_bg = np.all(im == background_color, axis=2)
+        gt_bg = gt_bg.reshape(*gt_bg.shape, 1)
+        gt_image = np.concatenate((gt_bg, np.invert(gt_bg)), axis=2)
+
+        return gt_image
+
+    def get_batches_fn(batch_size):
+        """
+        Create batches of training data
+        :param batch_size: Batch Size
+        :return: Batches of training data
+        """
+        image_paths = glob(os.path.join(data_folder, 'image_2', '*.png'))
+        label_paths = {
+            re.sub(r'_(lane|road)_', '_', os.path.basename(path)): path
+            for path in glob(os.path.join(data_folder, 'gt_image_2', '*_road_*.png'))}
+        
+
+        seq = iaa.Sequential([iaa.Flipud(0.5), iaa.Fliplr(0.5), iaa.Crop(percent=(0.0, 0.3)),
+            iaa.PerspectiveTransform(keep_size=True, scale=(0.0, 0.1))])
+
+        for batch_i in range(50):
+            random.shuffle(image_paths)
+            batch_paths = image_paths[:batch_size]
+
+            images = [scipy.misc.imresize(scipy.misc.imread(image_file), image_shape) for image_file in batch_paths]
+            gt_image_files = [label_paths[os.path.basename(image_file)] for image_file in batch_paths]
+            gt_images = [scipy.misc.imresize(scipy.misc.imread(gt_image_file), image_shape) for gt_image_file in
+                    gt_image_files]
+            
+            seq_det = seq.to_deterministic()
+            image_aug = seq_det.augment_images(images)
+            label_aug = seq_det.augment_images(gt_images)
+            label_aug_trans = [label_image(img) for img in label_aug]
+
+            yield np.array(image_aug), np.array(label_aug_trans)
+
+    return get_batches_fn
 
 
 def gen_batch_function(data_folder, image_shape):
@@ -109,7 +162,7 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
     :param image_shape: Tuple - Shape of image
     :return: Output for for each test image
     """
-    for image_file in glob(os.path.join(data_folder, 'image_2', '*.png')):
+    for index, image_file in enumerate(glob(os.path.join(data_folder, 'image_2', '*.png'))):
         image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape)
 
         im_softmax = sess.run(
